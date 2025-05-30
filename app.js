@@ -60,7 +60,7 @@ async function listarContraCheques(email) {
     const siteData = await siteResponse.json();
     const siteId = siteData.id;
 
-    // 2. Pega o drive da biblioteca Documentos
+    // 2. Pega drives do site
     const driveResponse = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteId}/drives`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -68,18 +68,39 @@ async function listarContraCheques(email) {
     if (!driveResponse.ok) throw new Error("Erro ao buscar drives");
     const driveData = await driveResponse.json();
 
-    // Assumindo que o primeiro drive é Documentos
-    const driveId = driveData.value[0].id;
+    // 3. Busca o drive chamado 'Documentos'
+    const documentDrive = driveData.value.find(d => d.name === "Documentos");
+    if (!documentDrive) throw new Error("Drive 'Documentos' não encontrado");
+    const driveId = documentDrive.id;
 
-    // 3. Lista as pastas dentro de "ContraCheque"
-    const contraChequeFolderResponse = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/ContraCheque:/children`,
+    // 4. Lista o conteúdo raiz do drive Documentos para diagnosticar
+    const rootResponse = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/root/children`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (!contraChequeFolderResponse.ok) throw new Error("Erro ao buscar pastas");
+    if (!rootResponse.ok) throw new Error("Erro ao listar raiz do drive");
+    const rootData = await rootResponse.json();
+    console.log("Conteúdo raiz do drive Documentos:", rootData);
+
+    // 5. Verifica se existe a pasta ContraCheque na raiz
+    const contraChequeFolder = rootData.value.find(
+      item => item.folder && item.name.toLowerCase() === "contraCheque".toLowerCase()
+    );
+    if (!contraChequeFolder) {
+      fileListDiv.textContent = "Pasta 'ContraCheque' não encontrada no drive Documentos.";
+      statusDiv.textContent = "";
+      return;
+    }
+
+    // 6. Lista pastas dentro da pasta ContraCheque
+    const contraChequeFolderResponse = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${contraChequeFolder.id}/children`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!contraChequeFolderResponse.ok) throw new Error("Erro ao buscar pastas dentro de ContraCheque");
     const contraChequeFolders = await contraChequeFolderResponse.json();
 
-    // 4. Procura a pasta que corresponde ao email do usuário
+    // 7. Procura a pasta que corresponde ao email do usuário (case insensitive)
     const userFolder = contraChequeFolders.value.find(
       item => item.folder && item.name.toLowerCase() === email.toLowerCase()
     );
@@ -90,7 +111,7 @@ async function listarContraCheques(email) {
       return;
     }
 
-    // 5. Lista arquivos dentro da pasta do usuário
+    // 8. Lista arquivos dentro da pasta do usuário
     const userFilesResponse = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${userFolder.id}/children`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -104,7 +125,7 @@ async function listarContraCheques(email) {
       return;
     }
 
-    // 6. Mostra links para download
+    // 9. Mostra links para download dos arquivos
     userFiles.value.forEach(file => {
       if (!file.file) return; // ignora pastas
 
