@@ -16,6 +16,8 @@ const loginBtn = document.getElementById("btnLogin");
 const statusDiv = document.getElementById("status");
 const fileListDiv = document.getElementById("fileList");
 
+// ... seu código MSAL e login permanece igual ...
+
 loginBtn.addEventListener("click", async () => {
   statusDiv.textContent = "";
   fileListDiv.innerHTML = "";
@@ -25,7 +27,6 @@ loginBtn.addEventListener("click", async () => {
       prompt: "select_account"
     });
 
-    // Define explicitamente a conta ativa após o login
     msalInstance.setActiveAccount(loginResponse.account);
 
     const account = msalInstance.getActiveAccount();
@@ -34,15 +35,19 @@ loginBtn.addEventListener("click", async () => {
     statusDiv.textContent = `Logado como ${account.username}`;
     loginBtn.style.display = "none";
 
-    await listarContraCheques(account.username);
+    // Primeiro listar pastas dentro de ContraCheque
+    await listarPastasContraCheque();
+
+    // Depois listar arquivos do usuário
+    // await listarContraCheques(account.username);
   } catch (err) {
     console.error(err);
     statusDiv.textContent = "Erro no login: " + err.message;
   }
 });
 
-async function listarContraCheques(email) {
-  statusDiv.textContent = "Carregando contra-cheques...";
+async function listarPastasContraCheque() {
+  statusDiv.textContent = "Listando pastas dentro de ContraCheque...";
   fileListDiv.innerHTML = "";
 
   try {
@@ -71,53 +76,39 @@ async function listarContraCheques(email) {
     if (!driveResponse.ok) throw new Error("Erro ao buscar drives");
 
     const driveData = await driveResponse.json();
-
-    // Assumindo que a primeira drive é a Documentos, caso tenha mais ajuste aqui
     const driveId = driveData.value[0].id;
 
-    // Caminho da pasta pessoal do usuário dentro da biblioteca Documentos
-    const folderPath = `ContraCheque/${email}`;
+    // Listar pastas dentro de ContraCheque (não arquivo, só pastas)
+    const folderPath = "ContraCheque";
 
-    // Busca os arquivos na pasta do usuário
-    const filesResponse = await fetch(
+    const foldersResponse = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(folderPath)}:/children`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    if (!filesResponse.ok) {
-      if (filesResponse.status === 404) {
-        fileListDiv.textContent = "Nenhum arquivo encontrado na sua pasta.";
-        statusDiv.textContent = "";
-        return;
-      }
-      throw new Error("Erro ao buscar arquivos");
-    }
+    if (!foldersResponse.ok) throw new Error("Erro ao buscar pastas");
 
-    const filesData = await filesResponse.json();
+    const foldersData = await foldersResponse.json();
 
-    if (filesData.value.length === 0) {
-      fileListDiv.textContent = "Nenhum arquivo encontrado na sua pasta.";
+    // Filtra só pastas
+    const folders = foldersData.value.filter(item => item.folder);
+
+    if (folders.length === 0) {
+      fileListDiv.textContent = "Nenhuma pasta encontrada dentro de ContraCheque.";
       statusDiv.textContent = "";
       return;
     }
 
-    // Exibe links para download dos arquivos
-    filesData.value.forEach(file => {
-      if (!file.file) return; // ignora pastas
-
-      const a = document.createElement("a");
-      a.href = file["@microsoft.graph.downloadUrl"];
-      a.textContent = file.name;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      a.style.display = "block";
-      a.style.margin = "8px 0";
-      fileListDiv.appendChild(a);
+    folders.forEach(folder => {
+      const div = document.createElement("div");
+      div.textContent = folder.name;
+      div.style.margin = "5px 0";
+      fileListDiv.appendChild(div);
     });
 
-    statusDiv.textContent = "Clique nos arquivos para baixar.";
+    statusDiv.textContent = "Pastas listadas acima. Confira o nome exato para usar na busca dos arquivos.";
   } catch (err) {
     console.error(err);
-    statusDiv.textContent = "Erro ao carregar arquivos: " + err.message;
+    statusDiv.textContent = "Erro ao listar pastas: " + err.message;
   }
 }
