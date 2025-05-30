@@ -31,7 +31,7 @@ loginBtn.addEventListener("click", async () => {
     statusDiv.textContent = `Logado como ${account.username}`;
     loginBtn.style.display = "none";
 
-    listarContraCheques(account.username);
+    await listarContraCheques(account.username);
   } catch (err) {
     console.error(err);
     statusDiv.textContent = "Erro no login: " + err.message;
@@ -40,6 +40,8 @@ loginBtn.addEventListener("click", async () => {
 
 async function listarContraCheques(email) {
   statusDiv.textContent = "Carregando contra-cheques...";
+  fileListDiv.innerHTML = "";
+
   try {
     const tokenResponse = await msalInstance.acquireTokenSilent({
       scopes: ["Sites.Read.All"],
@@ -58,7 +60,7 @@ async function listarContraCheques(email) {
     const siteData = await siteResponse.json();
     const siteId = siteData.id;
 
-    // Pega o driveId (Documentos)
+    // Pega o driveId da biblioteca Documentos
     const driveResponse = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteId}/drives`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -66,14 +68,19 @@ async function listarContraCheques(email) {
     if (!driveResponse.ok) throw new Error("Erro ao buscar drives");
 
     const driveData = await driveResponse.json();
+
+    // Assumindo que a primeira drive é a Documentos, caso tenha mais ajuste aqui
     const driveId = driveData.value[0].id;
 
-    // Pega arquivos na pasta pessoal (ContraCheque/{email})
+    // Caminho da pasta pessoal do usuário dentro da biblioteca Documentos
     const folderPath = `ContraCheque/${email}`;
+
+    // Busca os arquivos na pasta do usuário
     const filesResponse = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(folderPath)}:/children`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
+
     if (!filesResponse.ok) {
       if (filesResponse.status === 404) {
         fileListDiv.textContent = "Nenhum arquivo encontrado na sua pasta.";
@@ -82,6 +89,7 @@ async function listarContraCheques(email) {
       }
       throw new Error("Erro ao buscar arquivos");
     }
+
     const filesData = await filesResponse.json();
 
     if (filesData.value.length === 0) {
@@ -90,8 +98,7 @@ async function listarContraCheques(email) {
       return;
     }
 
-    // Monta lista de links para download
-    fileListDiv.innerHTML = "";
+    // Exibe links para download dos arquivos
     filesData.value.forEach(file => {
       if (!file.file) return; // ignora pastas
 
@@ -100,6 +107,8 @@ async function listarContraCheques(email) {
       a.textContent = file.name;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
+      a.style.display = "block";
+      a.style.margin = "8px 0";
       fileListDiv.appendChild(a);
     });
 
