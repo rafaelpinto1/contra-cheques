@@ -20,10 +20,13 @@ loginBtn.addEventListener("click", async () => {
   statusDiv.textContent = "";
   fileListDiv.innerHTML = "";
   try {
-    await msalInstance.loginPopup({
+    const loginResponse = await msalInstance.loginPopup({
       scopes: ["User.Read", "Sites.Read.All"],
       prompt: "select_account"
     });
+
+    // Define explicitamente a conta ativa após o login
+    msalInstance.setActiveAccount(loginResponse.account);
 
     const account = msalInstance.getActiveAccount();
     if (!account) throw new Error("Nenhuma conta ativa encontrada.");
